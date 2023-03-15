@@ -4,8 +4,8 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <stdio.h>
-#include "lib/assert.h"
-#include "lib/chunk_ring_buffer.h"
+#include "base/assert.h"
+#include "base/chunk_ring_buffer.h"
 #include "common/posix_net.h"
 #include "common/net_messages.h"
 #include "net_events.h"
@@ -68,7 +68,8 @@ void InitPosixNet(posix_net_context *Context) {
       .Addr = CommandBufferAddr,
       .Length = CommandBufferLength
     };
-    InitChunkRingBuffer(&Context->CommandRing, 50, CommandBuffer);
+
+    Context->CommandRing = ChunkRingBuffer_create(50, CommandBuffer);
   }
 
   {
@@ -78,7 +79,7 @@ void InitPosixNet(posix_net_context *Context) {
       .Addr = EventBufferAddr,
       .Length = EventBufferLength
     };
-    InitChunkRingBuffer(&Context->EventRing, 50, EventBuffer);
+    Context->EventRing = ChunkRingBuffer_create(50, EventBuffer);
   }
 
   AllocateBuffer(&Context->ReceiveBuffer, &Context->Arena, 1024*10);
@@ -94,7 +95,6 @@ void InitPosixNet(posix_net_context *Context) {
 
   struct sockaddr_in Address;
   memset(&Address, 0, sizeof(Address));
-  Address.sin_len = sizeof(Address);
   Address.sin_family = AF_INET;
   Address.sin_port = htons(4321);
   Address.sin_addr.s_addr = INADDR_ANY;
@@ -117,8 +117,8 @@ void TerminatePosixNet(posix_net_context *Context) {
 
   TerminatePosixNetClientSet(&Context->ClientSet);
 
-  TerminateChunkRingBuffer(&Context->CommandRing);
-  TerminateChunkRingBuffer(&Context->EventRing);
+  TerminateChunkRingBuffer(Context->CommandRing);
+  TerminateChunkRingBuffer(Context->EventRing);
 
   TerminateMemory(Context);
 }
@@ -128,7 +128,7 @@ void ShutdownPosixNet(posix_net_context *Context) {
   Assert(GetMemoryArenaFree(&Context->Arena) >= NET_COMMAND_MAX_LENGTH);
 
   buffer Command = SerializeShutdownNetCommand(&Context->Arena);
-  ChunkRingBufferWrite(&Context->CommandRing, Command);
+  ChunkRingBufferWrite(Context->CommandRing, Command);
   ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
   RequestWake(Context);
@@ -136,7 +136,7 @@ void ShutdownPosixNet(posix_net_context *Context) {
 
 static void ProcessCommands(posix_net_context *Context) {
   memsize Length;
-  while((Length = ChunkRingBufferCopyRead(&Context->CommandRing, Context->CommandReadBuffer))) {
+  while((Length = ChunkRingBufferCopyRead(Context->CommandRing, Context->CommandReadBuffer))) {
     net_command_type Type = UnserializeNetCommandType(Context->CommandReadBuffer);
     buffer Command = {
       .Addr = Context->CommandReadBuffer.Addr,
@@ -178,7 +178,7 @@ static void ProcessCommands(posix_net_context *Context) {
 }
 
 memsize ReadPosixNetEvent(posix_net_context *Context, buffer Buffer) {
-  return ChunkRingBufferCopyRead(&Context->EventRing, Buffer);
+  return ChunkRingBufferCopyRead(Context->EventRing, Buffer);
 }
 
 void PosixNetBroadcast(posix_net_context *Context, net_client_id *IDs, memsize IDCount, buffer Message) {
@@ -190,7 +190,7 @@ void PosixNetBroadcast(posix_net_context *Context, net_client_id *IDs, memsize I
     Message,
     &Context->Arena
   );
-  ChunkRingBufferWrite(&Context->CommandRing, Command);
+  ChunkRingBufferWrite(Context->CommandRing, Command);
   ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
   RequestWake(Context);
@@ -201,7 +201,7 @@ void PosixNetSend(posix_net_context *Context, net_client_id ID, buffer Message) 
   Assert(GetMemoryArenaFree(&Context->Arena) >= NET_COMMAND_MAX_LENGTH);
 
   buffer Command = SerializeSendNetCommand(ID, Message, &Context->Arena);
-  ChunkRingBufferWrite(&Context->CommandRing, Command);
+  ChunkRingBufferWrite(Context->CommandRing, Command);
   ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
   RequestWake(Context);
@@ -210,7 +210,7 @@ void PosixNetSend(posix_net_context *Context, net_client_id ID, buffer Message) 
 void ProcessIncoming(posix_net_context *Context, posix_net_client *Client) {
   for(;;) {
     buffer Incoming = Context->IncomingReadBuffer;
-    Incoming.Length = ByteRingBufferPeek(&Client->InBuffer, Incoming);
+    Incoming.Length = ByteRingBufferPeek(Client->InBuffer, Incoming);
 
     buffer Message = PosixExtractPacketMessage(Incoming);
     if(Message.Length == 0) {
@@ -241,10 +241,10 @@ void ProcessIncoming(posix_net_context *Context, posix_net_client *Client) {
     memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
     Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
     buffer Event = SerializeMessageNetEvent(Client->ID, Message, &Context->Arena);
-    ChunkRingBufferWrite(&Context->EventRing, Event);
+    ChunkRingBufferWrite(Context->EventRing, Event);
     ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
-    ByteRingBufferReadAdvance(&Client->InBuffer, POSIX_PACKET_HEADER_SIZE + Message.Length);
+    ByteRingBufferReadAdvance(Client->InBuffer, POSIX_PACKET_HEADER_SIZE + Message.Length);
   }
 }
 
@@ -282,7 +282,7 @@ void* RunPosixNet(void *Data) {
             memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
             Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
             buffer Event = SerializeDisconnectNetEvent(ClientID, &Context->Arena);
-            ChunkRingBufferWrite(&Context->EventRing, Event);
+            ChunkRingBufferWrite(Context->EventRing, Event);
             ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
             printf("A client disconnected. (%zu)\n", ClientID);
           }
@@ -290,7 +290,7 @@ void* RunPosixNet(void *Data) {
             buffer Input;
             Input.Addr = Context->ReceiveBuffer.Addr;
             Input.Length = Result;
-            ByteRingBufferWrite(&Client->InBuffer, Input);
+            ByteRingBufferWrite(Client->InBuffer, Input);
             ProcessIncoming(Context, Client);
           }
         }
@@ -318,7 +318,7 @@ void* RunPosixNet(void *Data) {
       memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
       Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
       buffer Event = SerializeConnectNetEvent(Client->ID, &Context->Arena);
-      ChunkRingBufferWrite(&Context->EventRing, Event);
+      ChunkRingBufferWrite(Context->EventRing, Event);
       ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
     }
 

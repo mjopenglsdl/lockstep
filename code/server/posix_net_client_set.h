@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib/byte_ring_buffer.h"
+#include "base/byte_ring_buffer.h"
 #include "net.h"
 
 #define POSIX_NET_CLIENT_SET_MAX 16
@@ -8,7 +8,7 @@
 struct posix_net_client {
   int FD;
   net_client_id ID;
-  byte_ring_buffer InBuffer;
+  byte_ring_buffer_t InBuffer;
 };
 
 struct posix_net_client_set {

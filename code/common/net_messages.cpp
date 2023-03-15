@@ -1,8 +1,9 @@
-#include "lib/assert.h"
-#include "lib/buf_view.h"
-#include "lib/seq_write.h"
+#include "base/assert.h"
+#include "base/buf_view.h"
+#include "base/seq_write.h"
+
 #include "common/conversion.h"
-#include "net_messages.h"
+#include "common/net_messages.h"
 
 void WriteType(seq_write *W, net_message_type Type) {
   ui8 TypeUI8 = SafeCastIntToUI8(Type);

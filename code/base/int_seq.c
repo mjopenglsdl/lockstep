@@ -1,5 +1,6 @@
 #include <math.h>
-#include "int_seq.h"
+
+#include "base/int_seq.h"
 
 void InitIntSeq(int_seq *Seq, memsize *Ints, memsize Capacity) {
   Seq->Count = 0;

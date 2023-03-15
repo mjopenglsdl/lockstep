@@ -1,8 +1,8 @@
 #pragma once
 
-#include "lib/def.h"
-#include "lib/math.h"
-#include "lib/memory_arena.h"
+#include "base/def.h"
+#include "base/math.h"
+#include "base/memory_arena.h"
 
 #define SIMULATION_PLAYER_MAX 8
 #define SIMULATION_UNIT_MAX 4096

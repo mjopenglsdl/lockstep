@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib/memory_arena.h"
+#include "base/memory_arena.h"
 #include "net.h"
 
 #define NET_COMMAND_MAX_LENGTH 512

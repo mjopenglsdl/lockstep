@@ -1,6 +1,8 @@
 #include <math.h>
-#include "assert.h"
-#include "math.h"
+
+#include "base/assert.h"
+#include "base/math.h"
+#include "base/math_op.h"
 
 int MaxInt(int A, int B) {
   return A > B ? A : B;

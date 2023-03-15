@@ -1,13 +1,13 @@
 #pragma once
 
-#include "lib/math.h"
-#include "lib/chunk_list.h"
+#include "base/math.h"
+#include "base/chunk_list.h"
 
-struct game_mouse {
+typedef struct {
   ivec2 Pos;
   bool ButtonPressed;
   ui8 ButtonChangeCount;
-};
+}game_mouse;
 
 struct game_platform {
   uusec64 Time;

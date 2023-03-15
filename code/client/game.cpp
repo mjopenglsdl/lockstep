@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <math.h>
-#include "lib/def.h"
-#include "lib/assert.h"
-#include "lib/int_seq.h"
-#include "lib/chunk_ring_buffer.h"
-#include "lib/memory_arena.h"
+
+#include "base/def.h"
+#include "base/assert.h"
+#include "base/int_seq.h"
+#include "base/chunk_ring_buffer.h"
+#include "base/memory_arena.h"
+
 #include "common/net_messages.h"
 #include "common/simulation.h"
 #include "common/order_serialization.h"
@@ -13,7 +15,9 @@
 #include "net_events.h"
 #include "net_commands.h"
 #include "render_commands.h"
+
 #include "game.h"
+
 
 static const ui32 DarkBlueColor = 0x002D3E50;
 static const ui32 RedColor = 0x00E64E42;
@@ -55,7 +59,7 @@ struct game_state {
   int_seq OrderListCountSeq;
   uusec64 NextTickTime;
   uusec64 NextExtraTickTime;
-  chunk_ring_buffer OrderListRing;
+  chunk_ring_buffer_t OrderListRing;
   unit_selection UnitSelection;
   ivec2 LastMouseDownPos;
   bool MouseDragging;
@@ -97,7 +101,8 @@ void InitGame(buffer Memory) {
       .Addr = Storage,
       .Length = StorageSize
     };
-    InitChunkRingBuffer(&State->OrderListRing, Count, Buffer);
+    
+    State->OrderListRing = ChunkRingBuffer_create(Count, Buffer);
   }
 
   State->PlayerID = SIMULATION_UNDEFINED_PLAYER_ID;
@@ -257,7 +262,7 @@ void ProcessMessageEvent(message_net_event Event, game_state *State, chunk_list 
       }
 
       buffer SimOrderListBuffer = SerializeOrderList(&SimOrderList, &State->Arena);
-      ChunkRingBufferWrite(&State->OrderListRing, SimOrderListBuffer);
+      ChunkRingBufferWrite(State->OrderListRing, SimOrderListBuffer);
 
       ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
       break;
@@ -439,9 +444,9 @@ void UpdateGame(game_platform *Platform, chunk_list *NetEvents, chunk_list *NetC
 
   if(State->Mode == game_mode_active) {
     if(Platform->Time >= State->NextTickTime) {
-      memsize OrderListCount = GetChunkRingBufferUnreadCount(&State->OrderListRing);
+      memsize OrderListCount = GetChunkRingBufferUnreadCount(State->OrderListRing);
       if(OrderListCount != 0) {
-        RunSimulationTick(&State->Sim, &State->OrderListRing, &State->Arena);
+        RunSimulationTick(&State->Sim, State->OrderListRing, &State->Arena);
         OrderListCount--;
         IntSeqPush(&State->OrderListCountSeq, OrderListCount);
 
@@ -450,7 +455,7 @@ void UpdateGame(game_platform *Platform, chunk_list *NetEvents, chunk_list *NetC
           static const umsec32 BaseFrameLag = 200;
           memsize TargetFrameLag = BaseFrameLag/SimulationTickDuration + round(CountStdDev * 4);
           if(OrderListCount > TargetFrameLag) {
-            RunSimulationTick(&State->Sim, &State->OrderListRing, &State->Arena);
+            RunSimulationTick(&State->Sim, State->OrderListRing, &State->Arena);
             State->NextExtraTickTime += 1000*1000;
           }
         }

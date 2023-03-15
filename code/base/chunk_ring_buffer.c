@@ -1,21 +1,31 @@
 #include <string.h>
 #include <stdatomic.h>
-#include "assert.h"
-#include "chunk_ring_buffer.h"
+#include "base/assert.h"
+#include "base/chunk_ring_buffer.h"
 
-typedef chunk_ring_buffer crb;
+struct chunk_ring_buffer
+{
+  _Atomic memsize WriteIndex;
+  memsize ChunkCount;
+  memsize *Offsets;
+  memsize *Sizes;
+  buffer Data;
+  _Atomic memsize ReadIndex;
+};
 
-void InitChunkRingBuffer(
-  crb *Buffer,
+
+chunk_ring_buffer_t ChunkRingBuffer_create(
   memsize ChunkCount,
-  buffer Storage
-) {
+  buffer Storage 
+) { 
   Assert(Storage.Length > sizeof(memsize)*ChunkCount*2);
 
-  Buffer->Offsets = (memsize*)Storage.Addr;
+  chunk_ring_buffer_t inst = malloc(sizeof(struct chunk_ring_buffer));
+
+  inst->Offsets = (memsize*)Storage.Addr;
 
   void *Sizes = ((ui8*)Storage.Addr) + sizeof(memsize)*ChunkCount;
-  Buffer->Sizes = (memsize*)Sizes;
+  inst->Sizes = (memsize*)Sizes;
 
   memset(Storage.Addr, 0, sizeof(memsize)*ChunkCount*2);
 
@@ -23,14 +33,16 @@ void InitChunkRingBuffer(
     .Addr = ((ui8*)Storage.Addr) + sizeof(memsize)*ChunkCount*2,
     .Length = Storage.Length - sizeof(memsize)*ChunkCount*2
   };
-  Buffer->Data = Data;
+  inst->Data = Data;
 
-  Buffer->ChunkCount = ChunkCount;
-  Buffer->ReadIndex = ATOMIC_VAR_INIT(0);
-  Buffer->WriteIndex = ATOMIC_VAR_INIT(0);
+  inst->ChunkCount = ChunkCount;
+  inst->ReadIndex = ATOMIC_VAR_INIT(0);
+  inst->WriteIndex = ATOMIC_VAR_INIT(0);
+  
+  return inst;
 }
 
-memsize GetChunkRingBufferUnreadCount(chunk_ring_buffer *Buffer) {
+memsize GetChunkRingBufferUnreadCount(chunk_ring_buffer_t Buffer) {
   memsize ReadIndex = atomic_load_explicit(&Buffer->ReadIndex, memory_order_acquire);
   memsize WriteIndex = atomic_load_explicit(&Buffer->WriteIndex, memory_order_acquire);
   if(WriteIndex >= ReadIndex) {
@@ -41,7 +53,7 @@ memsize GetChunkRingBufferUnreadCount(chunk_ring_buffer *Buffer) {
   }
 }
 
-void ChunkRingBufferWrite(chunk_ring_buffer *Buffer, const buffer Input) {
+void ChunkRingBufferWrite(chunk_ring_buffer_t Buffer, const buffer Input) {
   memsize WriteIndex = atomic_load_explicit(&Buffer->WriteIndex, memory_order_relaxed);
   memsize ReadIndex = atomic_load_explicit(&Buffer->ReadIndex, memory_order_acquire);
 
@@ -70,7 +82,7 @@ void ChunkRingBufferWrite(chunk_ring_buffer *Buffer, const buffer Input) {
   atomic_store_explicit(&Buffer->WriteIndex, NewWriteIndex, memory_order_release);
 }
 
-buffer ChunkRingBufferPeek(chunk_ring_buffer *Buffer) {
+buffer ChunkRingBufferPeek(chunk_ring_buffer_t Buffer) {
   memsize WriteIndex = atomic_load_explicit(&Buffer->WriteIndex, memory_order_acquire);
   memsize ReadIndex = atomic_load_explicit(&Buffer->ReadIndex, memory_order_relaxed);
 
@@ -86,7 +98,7 @@ buffer ChunkRingBufferPeek(chunk_ring_buffer *Buffer) {
   return Result;
 }
 
-buffer ChunkRingBufferRefRead(chunk_ring_buffer *Buffer) {
+buffer ChunkRingBufferRefRead(chunk_ring_buffer_t Buffer) {
   buffer Peek = ChunkRingBufferPeek(Buffer);
   if(Peek.Length != 0) {
     ChunkRingBufferReadAdvance(Buffer);
@@ -94,13 +106,13 @@ buffer ChunkRingBufferRefRead(chunk_ring_buffer *Buffer) {
   return Peek;
 }
 
-void ChunkRingBufferReadAdvance(chunk_ring_buffer *Buffer) {
+void ChunkRingBufferReadAdvance(chunk_ring_buffer_t Buffer) {
   memsize OldReadIndex = atomic_load_explicit(&Buffer->ReadIndex, memory_order_relaxed);
   memsize NewReadIndex = (OldReadIndex + 1) % Buffer->ChunkCount;
   atomic_store_explicit(&Buffer->ReadIndex, NewReadIndex, memory_order_release);
 }
 
-memsize ChunkRingBufferCopyRead(chunk_ring_buffer *Buffer, buffer Output) {
+memsize ChunkRingBufferCopyRead(chunk_ring_buffer_t Buffer, buffer Output) {
   buffer Peek = ChunkRingBufferPeek(Buffer);
   if(Peek.Length == 0) {
     return 0;
@@ -114,7 +126,7 @@ memsize ChunkRingBufferCopyRead(chunk_ring_buffer *Buffer, buffer Output) {
   return Peek.Length;
 }
 
-void TerminateChunkRingBuffer(crb *Buffer) {
+void TerminateChunkRingBuffer(chunk_ring_buffer_t Buffer) {
   atomic_store_explicit(&Buffer->WriteIndex, 0, memory_order_relaxed);
   Buffer->ChunkCount = 0;
   Buffer->Offsets = NULL;

@@ -1,4 +1,5 @@
-#include "lib/math.h"
+#include "base/math.h"
+#include "base/math_op.h"
 
 rvec2 ConvertWindowToNDCCoors(ivec2 WindowCoors, ivec2 Resolution) {
   rvec2 Result;

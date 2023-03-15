@@ -1,5 +1,5 @@
 #include "orwell.h"
-#include "lib/int_seq.h"
+#include "core/int_seq.h"
 
 #define countof(A) sizeof(A)/sizeof(A[0])
 

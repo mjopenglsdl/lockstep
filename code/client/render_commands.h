@@ -1,7 +1,7 @@
 #pragma once
 
-#include "lib/def.h"
-#include "lib/math.h"
+#include "base/def.h"
+#include "base/math.h"
 
 enum render_command_type {
   render_command_type_draw_square,

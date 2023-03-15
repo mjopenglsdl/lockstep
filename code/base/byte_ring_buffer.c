@@ -1,12 +1,18 @@
 #include <string.h>
 #include <stdatomic.h>
-#include "math.h"
-#include "assert.h"
-#include "byte_ring_buffer.h"
 
-typedef byte_ring_buffer brb;
+#include "base/math.h"
+#include "base/assert.h"
+#include "base/byte_ring_buffer.h"
 
-memsize ByteRingBufferCalcUsage(brb *Buffer) {
+struct byte_ring_buffer{
+  buffer Storage;
+  _Atomic memsize ReadPos;
+  _Atomic memsize WritePos;
+};
+
+
+memsize ByteRingBufferCalcUsage(byte_ring_buffer_t Buffer) {
   memsize Result;
   memsize WritePos = atomic_load_explicit(&Buffer->WritePos, memory_order_acquire);
   memsize ReadPos = atomic_load_explicit(&Buffer->ReadPos, memory_order_acquire);
@@ -19,18 +25,21 @@ memsize ByteRingBufferCalcUsage(brb *Buffer) {
   return Result;
 }
 
-memsize ByteRingBufferCalcFree(brb *Buffer) {
+memsize ByteRingBufferCalcFree(byte_ring_buffer_t Buffer) {
   memsize Usage = ByteRingBufferCalcUsage(Buffer);
   return Buffer->Storage.Length - 1 - Usage;
 }
 
-void InitByteRingBuffer(brb *Buffer, buffer Storage) {
-  Buffer->Storage = Storage;
-  Buffer->WritePos = ATOMIC_VAR_INIT(0);
-  Buffer->ReadPos = ATOMIC_VAR_INIT(0);
+byte_ring_buffer_t ByteRingBuffer_create(buffer Storage) {
+  byte_ring_buffer_t inst = malloc(sizeof(struct byte_ring_buffer));
+  inst->Storage = Storage;
+  inst->WritePos = ATOMIC_VAR_INIT(0);
+  inst->ReadPos = ATOMIC_VAR_INIT(0);
+
+  return inst;
 }
 
-void ByteRingBufferWrite(brb *Buffer, buffer Input) {
+void ByteRingBufferWrite(byte_ring_buffer_t Buffer, buffer Input) {
   Assert(ByteRingBufferCalcFree(Buffer) > Input.Length);
 
   memsize WritePos = atomic_load_explicit(&Buffer->WritePos, memory_order_relaxed);
@@ -56,7 +65,7 @@ void ByteRingBufferWrite(brb *Buffer, buffer Input) {
   atomic_store_explicit(&Buffer->WritePos, NewWritePos, memory_order_release);
 }
 
-memsize ByteRingBufferPeek(brb *ByteRingBuffer, buffer Output) {
+memsize ByteRingBufferPeek(byte_ring_buffer_t ByteRingBuffer, buffer Output) {
   memsize Usage = ByteRingBufferCalcUsage(ByteRingBuffer);
   memsize ReadLength = MinMemsize(Output.Length, Usage);
 
@@ -82,26 +91,26 @@ memsize ByteRingBufferPeek(brb *ByteRingBuffer, buffer Output) {
   return ReadLength;
 }
 
-void ByteRingBufferReadAdvance(brb *Ring, memsize Length) {
+void ByteRingBufferReadAdvance(byte_ring_buffer_t Ring, memsize Length) {
   memsize OldReadPos = atomic_load_explicit(&Ring->ReadPos, memory_order_relaxed);
   memsize NewReadPos = (OldReadPos + Length) % Ring->Storage.Length;
   atomic_store_explicit(&Ring->ReadPos, NewReadPos, memory_order_release);
 }
 
-memsize ByteRingBufferRead(brb *Ring, buffer Output) {
+memsize ByteRingBufferRead(byte_ring_buffer_t Ring, buffer Output) {
   memsize ReadLength = ByteRingBufferPeek(Ring, Output);
   ByteRingBufferReadAdvance(Ring, ReadLength);
   return ReadLength;
 }
 
-void TerminateByteRingBuffer(brb *Buffer) {
+void TerminateByteRingBuffer(byte_ring_buffer_t Buffer) {
   ByteRingBufferReset(Buffer);
   Buffer->Storage.Addr = NULL;
   Buffer->Storage.Length = 0;
 }
 
 /* Not thread-safe */
-void ByteRingBufferReset(brb *Ring) {
+void ByteRingBufferReset(byte_ring_buffer_t Ring) {
   atomic_store_explicit(&Ring->WritePos, 0, memory_order_relaxed);
   atomic_store_explicit(&Ring->ReadPos, 0, memory_order_relaxed);
 }

@@ -1,5 +1,10 @@
+#ifdef __APPLE__
 #include <OpenGL/gl.h>
-#include "lib/assert.h"
+#else
+#include <GL/gl.h>
+#endif
+
+#include "base/assert.h"
 #include "render_commands.h"
 #include "opengl.h"
 

@@ -3,9 +3,9 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
-#include "lib/assert.h"
-#include "lib/chunk_list.h"
-#include "lib/memory_arena.h"
+#include "base/assert.h"
+#include "base/chunk_list.h"
+#include "base/memory_arena.h"
 #include "common/posix_time.h"
 #include "net_commands.h"
 #include "net_events.h"

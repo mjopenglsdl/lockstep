@@ -1,8 +1,8 @@
 #pragma once
 
-#include "lib/def.h"
-#include "lib/math.h"
-#include "lib/memory_arena.h"
+#include "base/def.h"
+#include "base/math.h"
+#include "base/memory_arena.h"
 
 #define NET_MESSAGE_MAX_LENGTH 1024
 

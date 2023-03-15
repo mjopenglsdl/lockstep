@@ -25,7 +25,7 @@ typedef ui64 uusec64;
 
 typedef size_t memsize;
 
-struct buffer {
+typedef struct {
   void *Addr;
   memsize Length;
-};
+} buffer;

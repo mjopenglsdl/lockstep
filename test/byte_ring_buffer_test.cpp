@@ -1,7 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "orwell.h"
-#include "lib/byte_ring_buffer.h"
+#include "base/byte_ring_buffer.h"
 
 static buffer CreateTestBuffer(memsize Length) {
   void *Addr = malloc(Length);

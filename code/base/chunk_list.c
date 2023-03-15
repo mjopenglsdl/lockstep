@@ -1,6 +1,7 @@
-#include "lib/assert.h"
-#include "lib/buf_view.h"
-#include "chunk_list.h"
+#include "base/assert.h"
+#include "base/buf_view.h"
+#include "base/chunk_list.h"
+
 
 buffer GetSubBuffer(chunk_list *List, memsize Pos) {
   buffer Buffer;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "lib/chunk_ring_buffer.h"
-#include "lib/byte_ring_buffer.h"
+#include "base/chunk_ring_buffer.h"
+#include "base/byte_ring_buffer.h"
 
 enum posix_net_state {
   posix_net_state_inactive,
@@ -15,9 +15,9 @@ struct posix_net_context {
   void *Memory;
   const char *Address;
   memory_arena Arena;
-  chunk_ring_buffer EventRing;
-  chunk_ring_buffer CommandRing;
-  byte_ring_buffer IncomingRing;
+  chunk_ring_buffer_t EventRing;
+  chunk_ring_buffer_t CommandRing;
+  byte_ring_buffer_t IncomingRing;
   buffer CommandReadBuffer;
   buffer ReceiveBuffer;
   buffer IncomingReadBuffer;

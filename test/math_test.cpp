@@ -1,5 +1,5 @@
 #include "orwell.h"
-#include "lib/math.h"
+#include "base/math.h"
 
 static void TestIvec2Addition(ow_test_context Context) {
   ivec2 A = MakeIvec2(2, 4);

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "lib/def.h"
-#include "lib/memory_arena.h"
+#include "base/def.h"
+#include "base/memory_arena.h"
 
 #define NET_EVENT_MAX_LENGTH 512
 

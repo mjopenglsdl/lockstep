@@ -1,5 +1,5 @@
-#include "lib/buf_view.h"
-#include "lib/memory_arena.h"
+#include "base/buf_view.h"
+#include "base/memory_arena.h"
 #include "simulation.h"
 
 buffer SerializeOrder(simulation_order Order, memory_arena *Arena);

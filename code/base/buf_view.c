@@ -1,6 +1,7 @@
 #include <string.h>
-#include "lib/assert.h"
-#include "buf_view.h"
+
+#include "base/assert.h"
+#include "base/buf_view.h"
 
 buf_view CreateBufView(buffer Buffer) {
   buf_view S;

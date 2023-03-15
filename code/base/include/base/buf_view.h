@@ -1,12 +1,17 @@
 #pragma once
 
 #include <stddef.h>
-#include "lib/def.h"
+#include "base/def.h"
 
-struct buf_view {
+typedef struct  {
   size_t Position;
   buffer Buffer;
-};
+} buf_view;
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 buf_view CreateBufView(buffer Buffer);
 memsize GetRemainingSize(buf_view *V);
@@ -23,3 +28,8 @@ ui8 BufViewReadUI8(buf_view *View);
 ui16 BufViewReadUI16(buf_view *View);
 si16 BufViewReadSI16(buf_view *View);
 memsize BufViewReadMemsize(buf_view *View);
+
+
+#ifdef __cplusplus
+}
+#endif

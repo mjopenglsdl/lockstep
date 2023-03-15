@@ -1,6 +1,7 @@
 #include <netinet/in.h>
-#include "lib/assert.h"
-#include "posix_net.h"
+
+#include "base/assert.h"
+#include "common/posix_net.h"
 
 ssize_t PosixNetReceive(int FD, buffer Buffer) {
   Assert(Buffer.Length != 0);

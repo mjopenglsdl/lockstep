@@ -1,6 +1,8 @@
-#include "lib/assert.h"
-#include "lib/math.h"
-#include "simulation.h"
+#include "base/assert.h"
+#include "base/math.h"
+#include "base/math_op.h"
+
+#include "common/simulation.h"
 
 #define UNITS_PER_PLAYER 256
 

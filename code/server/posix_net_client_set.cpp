@@ -18,7 +18,8 @@ void InitPosixNetClientSet(set *Set) {
     buffer Storage;
     Storage.Addr = ((ui8*)Set->InBuffer) + I*InBufferClientCapacity;
     Storage.Length = InBufferClientCapacity;
-    InitByteRingBuffer(&Set->Clients[I].InBuffer, Storage);
+
+    Set->Clients[I].InBuffer = ByteRingBuffer_create(Storage);
   }
 }
 
@@ -62,7 +63,7 @@ bool AdvancePosixNetClientSetIterator(iterator *Iterator) {
 
 void TerminatePosixNetClientSet(posix_net_client_set *Set) {
   for(memsize I=0; I<Set->Count; ++I) {
-    TerminateByteRingBuffer(&Set->Clients[I].InBuffer);
+    TerminateByteRingBuffer(Set->Clients[I].InBuffer);
   }
 
   free(Set->InBuffer);

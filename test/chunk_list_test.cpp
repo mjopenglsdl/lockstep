@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include "orwell.h"
-#include "lib/def.h"
-#include "lib/chunk_list.h"
+#include "base/def.h"
+#include "base/chunk_list.h"
 
 static buffer CreateTestBuffer(memsize Length) {
   void *Addr = malloc(Length);

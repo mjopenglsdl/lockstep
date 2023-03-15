@@ -1,6 +1,6 @@
-#include "lib/def.h"
-#include "lib/assert.h"
-#include "memory_arena.h"
+#include "base/def.h"
+#include "base/assert.h"
+#include "base/memory_arena.h"
 
 void InitMemoryArena(memory_arena *A, void *Base, memsize Capacity) {
   A->Base = Base;

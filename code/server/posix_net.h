@@ -1,8 +1,8 @@
 #pragma once
 
-#include "lib/def.h"
-#include "lib/chunk_ring_buffer.h"
-#include "lib/memory_arena.h"
+#include "base/def.h"
+#include "base/chunk_ring_buffer.h"
+#include "base/memory_arena.h"
 #include "posix_net_client_set.h"
 
 enum posix_net_mode {
@@ -18,8 +18,8 @@ struct posix_net_context {
   int ReadFDMax;
   void *Memory;
   memory_arena Arena;
-  chunk_ring_buffer CommandRing;
-  chunk_ring_buffer EventRing;
+  chunk_ring_buffer_t CommandRing;
+  chunk_ring_buffer_t EventRing;
   posix_net_client_set ClientSet;
   posix_net_mode Mode;
   buffer ReceiveBuffer;

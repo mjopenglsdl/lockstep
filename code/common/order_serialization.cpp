@@ -1,6 +1,8 @@
+#include "base/seq_write.h"
+
 #include "common/conversion.h"
-#include "order_serialization.h"
-#include "lib/seq_write.h"
+#include "common/order_serialization.h"
+
 
 static void WriterOrder(simulation_order Order, seq_write *W) {
   ui16 PlayerIDUI8 = SafeCastIntToUI8(Order.PlayerID);

@@ -1,6 +1,6 @@
-#include "lib/assert.h"
-#include "lib/buf_view.h"
-#include "lib/seq_write.h"
+#include "base/assert.h"
+#include "base/buf_view.h"
+#include "base/seq_write.h"
 #include "common/conversion.h"
 #include "net_events.h"
 

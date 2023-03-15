@@ -4,8 +4,8 @@
 #include <pthread.h>
 #include <Foundation/Foundation.h>
 #include <AppKit/AppKit.h>
-#include "lib/assert.h"
-#include "lib/memory_arena.h"
+#include "base/assert.h"
+#include "base/memory_arena.h"
 #include "common/net_messages.h"
 #include "common/posix_time.h"
 #include "net_commands.h"

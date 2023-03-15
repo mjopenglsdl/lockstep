@@ -1,4 +1,7 @@
-#include "lib/assert.h"
+#include "base/assert.h"
+
+#include "base/math_op.h"
+
 #include "interpolation.h"
 
 typedef simulation_unit sim_unit;

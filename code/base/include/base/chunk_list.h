@@ -1,13 +1,17 @@
 #pragma once
 
-#include "lib/def.h"
+#include "base/def.h"
 
-struct chunk_list {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
   buffer Buffer;
   memsize ReadPos;
   memsize WritePos;
   memsize Count;
-};
+} chunk_list;
 
 void InitChunkList(chunk_list *List, buffer Data);
 void ResetChunkList(chunk_list *List);
@@ -16,3 +20,8 @@ void ChunkListWrite(chunk_list *List, buffer Chunk);
 buffer ChunkListRead(chunk_list *List);
 void TerminateChunkList(chunk_list *List);
 memsize GetChunkListCount(chunk_list *List);
+
+
+#ifdef __cplusplus
+}
+#endif

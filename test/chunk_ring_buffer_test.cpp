@@ -1,6 +1,6 @@
 #include <string.h>
 #include "orwell.h"
-#include "lib/chunk_ring_buffer.h"
+#include "base/chunk_ring_buffer.h"
 
 static void TestCopyRead(ow_test_context Context) {
   ui8 RingBufferBlock[256];
@@ -8,20 +8,20 @@ static void TestCopyRead(ow_test_context Context) {
     .Addr = &RingBufferBlock,
     .Length = sizeof(RingBufferBlock)
   };
-  chunk_ring_buffer Ring;
-  InitChunkRingBuffer(&Ring, 2, RingBuffer);
+  chunk_ring_buffer_t Ring = ChunkRingBuffer_create(2, RingBuffer);
+
   char InputBlock[] = { 'h', 'e', 'y', '\0' };
   const buffer Input = { .Addr = &InputBlock, .Length = 4 };
-  ChunkRingBufferWrite(&Ring, Input);
+  ChunkRingBufferWrite(Ring, Input);
 
   char OutputBlock[8];
   buffer Output = { .Addr = &OutputBlock, .Length = sizeof(OutputBlock) };
-  memsize ReadLength = ChunkRingBufferCopyRead(&Ring, Output);
+  memsize ReadLength = ChunkRingBufferCopyRead(Ring, Output);
 
   OW_AssertEqualInt(4, ReadLength);
   OW_AssertEqualStr("hey", OutputBlock);
 
-  TerminateChunkRingBuffer(&Ring);
+  TerminateChunkRingBuffer(Ring);
 }
 
 static void TestLoopingWriteRead(ow_test_context Context) {
@@ -45,7 +45,8 @@ static void TestLoopingWriteRead(ow_test_context Context) {
     .Addr = &RingBufferBlock,
     .Length = sizeof(RingBufferBlock)
   };
-  chunk_ring_buffer Ring;
+
+  chunk_ring_buffer_t Ring;
   InitChunkRingBuffer(&Ring, 5, RingBuffer);
   ChunkRingBufferWrite(&Ring, Inputs[0]);
   ChunkRingBufferWrite(&Ring, Inputs[1]);
