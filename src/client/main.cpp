@@ -1,3 +1,4 @@
+#include <GL/freeglut_std.h>
 #include <stdio.h>
 #include <math.h>
 #include <signal.h>
@@ -18,7 +19,7 @@
 
 static bool TerminationRequested;
 
-struct client_state {
+struct client_context_t {
   bool Running;
   void *Memory;
 
@@ -37,16 +38,16 @@ static void HandleSigint(int signum) {
   TerminationRequested = true;
 }
 
-static void InitMemory(client_state *State) {
+static void InitMemory(client_context_t *ctx) {
   memsize MemorySize = 1024*1024;
-  State->Memory = malloc(MemorySize);
-  InitMemoryArena(&State->Arena, State->Memory, MemorySize);
+  ctx->Memory = malloc(MemorySize);
+  InitMemoryArena(&ctx->Arena, ctx->Memory, MemorySize);
 }
 
-static void TerminateMemory(client_state *State) {
-  TerminateMemoryArena(&State->Arena);
-  free(State->Memory);
-  State->Memory = NULL;
+static void TerminateMemory(client_context_t *ctx) {
+  TerminateMemoryArena(&ctx->Arena);
+  free(ctx->Memory);
+  ctx->Memory = NULL;
 }
 
 static void ExecuteNetCommands(posix_net_context *Context, chunk_list *Cmds) {
@@ -146,34 +147,34 @@ static void CB_GLUT_Input()
 
 }
 
-client_state State;
+client_context_t g_state;
 
 static void CB_GLUT_Timer()
 {
-  if (!State.Running) {
+  if (!g_state.Running) {
     return;
   }
 
-    State.Mouse.ButtonChangeCount = 0;
+    g_state.Mouse.ButtonChangeCount = 0;
     // ProcessOSXMessages(State.Window, &State.Mouse);
     
-    ReadNet(&State.NetContext, &State.NetEventList);
+    ReadNet(&g_state.NetContext, &g_state.NetEventList);
 
     game_platform GamePlatform;
     GamePlatform.Time = GetTime();
-    GamePlatform.Mouse = &State.Mouse;
-    GamePlatform.Resolution = State.Resolution;
+    GamePlatform.Mouse = &g_state.Mouse;
+    GamePlatform.Resolution = g_state.Resolution;
     GamePlatform.TerminationRequested = TerminationRequested;
     UpdateGame(
       &GamePlatform,
-      &State.NetEventList,
-      &State.NetCommandList,
-      &State.RenderCommandList,
-      &State.Running,
-      State.ClientMemory
+      &g_state.NetEventList,
+      &g_state.NetCommandList,
+      &g_state.RenderCommandList,
+      &g_state.Running,
+      g_state.ClientMemory
     );
-    ResetChunkList(&State.NetEventList);
-    ExecuteNetCommands(&State.NetContext, &State.NetCommandList);
+    ResetChunkList(&g_state.NetEventList);
+    ExecuteNetCommands(&g_state.NetContext, &g_state.NetCommandList);
 
     // if(State.Window.occlusionState & NSWindowOcclusionStateVisible) {
     //   DisplayOpenGL(&State.RenderCommandList);
@@ -183,41 +184,47 @@ static void CB_GLUT_Timer()
     //   usleep(10000);
     // }
 
-    ResetChunkList(&State.RenderCommandList);
+    ResetChunkList(&g_state.RenderCommandList);
 }
 
-int main(int argc, char *argv[]) {
+static void redraw()
+{
+  DisplayOpenGL(&g_state.RenderCommandList);
+}
+
+int main(int argc, char *argv[]) 
+{
   const char *HostAddress = "0.0.0.0";
   if(argc == 2) {
     HostAddress = argv[1];
   }
 
-  State.Resolution.X = 1600;
-  State.Resolution.Y = 1200;
+  g_state.Resolution.X = 1600;
+  g_state.Resolution.Y = 1200;
 
-  State.Mouse.Pos = MakeIvec2(0, 0);
-  State.Mouse.ButtonPressed = false;
-  InitMemory(&State);
+  g_state.Mouse.Pos = MakeIvec2(0, 0);
+  g_state.Mouse.ButtonPressed = false;
+  InitMemory(&g_state);
 
   {
     buffer Buffer;
     Buffer.Length = NET_COMMAND_MAX_LENGTH*100;
-    Buffer.Addr = MemoryArenaAllocate(&State.Arena, Buffer.Length);
-    InitChunkList(&State.NetCommandList, Buffer);
+    Buffer.Addr = MemoryArenaAllocate(&g_state.Arena, Buffer.Length);
+    InitChunkList(&g_state.NetCommandList, Buffer);
   }
 
   {
     buffer Buffer;
     Buffer.Length = NET_EVENT_MAX_LENGTH*100;
-    Buffer.Addr = MemoryArenaAllocate(&State.Arena, Buffer.Length);
-    InitChunkList(&State.NetEventList, Buffer);
+    Buffer.Addr = MemoryArenaAllocate(&g_state.Arena, Buffer.Length);
+    InitChunkList(&g_state.NetEventList, Buffer);
   }
 
   {
     buffer Buffer;
     Buffer.Length = 1024*200;
-    Buffer.Addr = MemoryArenaAllocate(&State.Arena, Buffer.Length);
-    InitChunkList(&State.RenderCommandList, Buffer);
+    Buffer.Addr = MemoryArenaAllocate(&g_state.Arena, Buffer.Length);
+    InitChunkList(&g_state.RenderCommandList, Buffer);
   }
 
   // InitPosixNet(&State.NetContext, HostAddress);
@@ -227,14 +234,14 @@ int main(int argc, char *argv[]) {
   // }
 
   {
-    buffer *B = &State.ClientMemory;
+    buffer *B = &g_state.ClientMemory;
     B->Length = 1024*512;
-    B->Addr = MemoryArenaAllocate(&State.Arena, B->Length);
+    B->Addr = MemoryArenaAllocate(&g_state.Arena, B->Length);
   }
-  InitGame(State.ClientMemory);
+  InitGame(g_state.ClientMemory);
 
   signal(SIGINT, HandleSigint);
-  State.Running = true;
+  g_state.Running = true;
 
   InitOpenGL();
 
@@ -243,20 +250,21 @@ int main(int argc, char *argv[]) {
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
   glutInitWindowSize(1024, 768);
   glutCreateWindow("test");
+  glutDisplayFunc(redraw);
 
   glutMainLoop();
 
   {
     printf("Waiting for thread join...\n");
-    int Result = pthread_join(State.NetThread, 0);
+    int Result = pthread_join(g_state.NetThread, 0);
     Assert(Result == 0);
   }
 
-  TerminateChunkList(&State.RenderCommandList);
-  TerminateChunkList(&State.NetEventList);
-  TerminateChunkList(&State.NetCommandList);
-  TerminatePosixNet(&State.NetContext);
-  TerminateMemory(&State);
+  TerminateChunkList(&g_state.RenderCommandList);
+  TerminateChunkList(&g_state.NetEventList);
+  TerminateChunkList(&g_state.NetCommandList);
+  TerminatePosixNet(&g_state.NetContext);
+  TerminateMemory(&g_state);
 
   printf("Gracefully terminated.\n");
   return 0;
