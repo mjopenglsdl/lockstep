@@ -8,30 +8,30 @@
 #include "base/assert.h"
 #include "common/posix_net.h"
 #include "common/net_messages.h"
+#include "common/logger.h"
 #include "net_events.h"
 #include "net_commands.h"
 #include "posix_net.h"
 
 enum errno_code {
   errno_code_interrupted_system_call = 4,
-  errno_code_in_progress = 36
 };
 
-static void RequestWake(posix_net_context *Context) {
+static void RequestWake(posix_net_context *ctx) {
   ui8 X = 1;
-  write(Context->WakeWriteFD, &X, 1);
+  write(ctx->WakeWriteFD, &X, 1);
 }
 
-static void InitMemory(posix_net_context *Context) {
+static void InitMemory(posix_net_context *ctx) {
   memsize MemorySize = 1024*1024*5;
-  Context->Memory = malloc(MemorySize);
-  InitMemoryArena(&Context->Arena, Context->Memory, MemorySize);
+  ctx->Memory = malloc(MemorySize);
+  InitMemoryArena(&ctx->Arena, ctx->Memory, MemorySize);
 }
 
-static void TerminateMemory(posix_net_context *Context) {
-  TerminateMemoryArena(&Context->Arena);
-  free(Context->Memory);
-  Context->Memory = NULL;
+static void TerminateMemory(posix_net_context *ctx) {
+  TerminateMemoryArena(&ctx->Arena);
+  free(ctx->Memory);
+  ctx->Memory = NULL;
 }
 
 static void AllocateBuffer(buffer *Buffer, memory_arena *Arena, memsize Length) {
@@ -39,18 +39,18 @@ static void AllocateBuffer(buffer *Buffer, memory_arena *Arena, memsize Length) 
   Buffer->Length = Length;
 }
 
-void InitPosixNet(posix_net_context *Context, const char *Address) {
-  InitMemory(Context);
-  Context->Address = Address;
+void InitPosixNet(posix_net_context *ctx, const char *Address) {
+  InitMemory(ctx);
+  ctx->Address = Address;
 
   {
     int SocketFD = socket(PF_INET, SOCK_STREAM, 0);
     Assert(SocketFD != -1);
-    Context->SocketFD = SocketFD;
+    ctx->SocketFD = SocketFD;
   }
 
   {
-    int Result = fcntl(Context->SocketFD, F_SETFL, O_NONBLOCK);
+    int Result = fcntl(ctx->SocketFD, F_SETFL, O_NONBLOCK);
     Assert(Result != -1);
   }
 
@@ -58,96 +58,100 @@ void InitPosixNet(posix_net_context *Context, const char *Address) {
     int FDs[2];
     int Result = pipe(FDs);
     Assert(Result != -1);
-    Context->WakeReadFD = FDs[0];
-    Context->WakeWriteFD = FDs[1];
+    ctx->WakeReadFD = FDs[0];
+    ctx->WakeWriteFD = FDs[1];
   }
 
-  Context->FDMax = MaxInt(Context->WakeReadFD, Context->SocketFD);
+  ctx->FDMax = MaxInt(ctx->WakeReadFD, ctx->SocketFD);
 
   {
     memsize Length = 1024*100;
-    void *EventBufferAddr = MemoryArenaAllocate(&Context->Arena, Length);
+    void *EventBufferAddr = MemoryArenaAllocate(&ctx->Arena, Length);
     buffer Buffer = {
       .Addr = EventBufferAddr,
       .Length = Length
     };
 
-    Context->EventRing = ChunkRingBuffer_create(50, Buffer);
+    ctx->EventRing = ChunkRingBuffer_create(50, Buffer);
   }
 
   {
     memsize Length = 1024*100;
-    void *CommandBufferAddr = MemoryArenaAllocate(&Context->Arena, Length);
+    void *CommandBufferAddr = MemoryArenaAllocate(&ctx->Arena, Length);
     buffer Buffer = {
       .Addr = CommandBufferAddr,
       .Length = Length
     };
-    Context->CommandRing = ChunkRingBuffer_create(50, Buffer);
+    ctx->CommandRing = ChunkRingBuffer_create(50, Buffer);
   }
 
   {
     memsize Length = 1024*100;
-    void *IncomingBufferAddr = MemoryArenaAllocate(&Context->Arena, Length);
+    void *IncomingBufferAddr = MemoryArenaAllocate(&ctx->Arena, Length);
     buffer Buffer = {
       .Addr = IncomingBufferAddr,
       .Length = Length
     };
-    Context->IncomingRing = ByteRingBuffer_create(Buffer);
+    ctx->IncomingRing = ByteRingBuffer_create(Buffer);
   }
 
-  AllocateBuffer(&Context->CommandReadBuffer, &Context->Arena, NET_COMMAND_MAX_LENGTH);
-  AllocateBuffer(&Context->ReceiveBuffer, &Context->Arena, 1024*10);
-  AllocateBuffer(&Context->IncomingReadBuffer, &Context->Arena, NET_MESSAGE_MAX_LENGTH);
+  AllocateBuffer(&ctx->CommandReadBuffer, &ctx->Arena, NET_COMMAND_MAX_LENGTH);
+  AllocateBuffer(&ctx->ReceiveBuffer, &ctx->Arena, 1024*10);
+  AllocateBuffer(&ctx->IncomingReadBuffer, &ctx->Arena, NET_MESSAGE_MAX_LENGTH);
 
-  Context->State = posix_net_state_inactive;
+  ctx->State = posix_net_state_inactive;
 }
 
-static void Connect(posix_net_context *Context) {
+static void Connect(posix_net_context *ctx) {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(4321);
   {
-    int Result = inet_aton(Context->Address, &addr.sin_addr);
+    int Result = inet_aton(ctx->Address, &addr.sin_addr);
     Assert(Result);
   }
 
-  int ConnectResult = connect(Context->SocketFD, (struct sockaddr *)&addr, sizeof(addr));
-  Assert(ConnectResult != -1 || errno == errno_code_in_progress);
+  int ret = connect(ctx->SocketFD, (struct sockaddr *)&addr, sizeof(addr));
+  // if (ret < 0) {
+  //   LOG_INFO("client connect failed with errno: {}", errno);
+  // }
+
+  Assert(ret != -1 || errno == EINPROGRESS);
 
   printf("Connecting...\n");
 
-  Context->State = posix_net_state_connecting;
+  ctx->State = posix_net_state_connecting;
 }
 
-memsize ReadPosixNetEvent(posix_net_context *Context, buffer Buffer) {
-  return ChunkRingBufferCopyRead(Context->EventRing, Buffer);
+memsize ReadPosixNetEvent(posix_net_context *ctx, buffer Buffer) {
+  return ChunkRingBufferCopyRead(ctx->EventRing, Buffer);
 }
 
-void ProcessCommands(posix_net_context *Context) {
+void ProcessCommands(posix_net_context *ctx) {
   memsize Length;
-  while((Length = ChunkRingBufferCopyRead(Context->CommandRing, Context->CommandReadBuffer))) {
-    net_command_type Type = UnserializeNetCommandType(Context->CommandReadBuffer);
+  while((Length = ChunkRingBufferCopyRead(ctx->CommandRing, ctx->CommandReadBuffer))) {
+    net_command_type Type = UnserializeNetCommandType(ctx->CommandReadBuffer);
     buffer Command = {
-      .Addr = Context->CommandReadBuffer.Addr,
+      .Addr = ctx->CommandReadBuffer.Addr,
       .Length = Length
     };
     switch(Type) {
       case net_command_type_shutdown: {
-        if(Context->State != posix_net_state_shutting_down) {
+        if(ctx->State != posix_net_state_shutting_down) {
           printf("Shutting down...\n");
-          int Result = shutdown(Context->SocketFD, SHUT_RDWR);
+          int Result = shutdown(ctx->SocketFD, SHUT_RDWR);
           Assert(Result == 0);
-          Context->State = posix_net_state_shutting_down;
+          ctx->State = posix_net_state_shutting_down;
         }
         break;
       }
       case net_command_type_send: {
-        if(Context->State == posix_net_state_connected) {
+        if(ctx->State == posix_net_state_connected) {
           send_net_command SendCommand = UnserializeSendNetCommand(Command);
           buffer Message = SendCommand.Message;
           printf("Sending message of size %zu!\n", Message.Length);
-          PosixNetSendPacket(Context->SocketFD, Message);
+          PosixNetSendPacket(ctx->SocketFD, Message);
         }
         break;
       }
@@ -155,10 +159,10 @@ void ProcessCommands(posix_net_context *Context) {
   }
 }
 
-void ProcessIncoming(posix_net_context *Context) {
+void ProcessIncoming(posix_net_context *ctx) {
   for(;;) {
-    buffer Incoming = Context->IncomingReadBuffer;
-    Incoming.Length = ByteRingBufferPeek(Context->IncomingRing, Incoming);
+    buffer Incoming = ctx->IncomingReadBuffer;
+    Incoming.Length = ByteRingBufferPeek(ctx->IncomingRing, Incoming);
 
     buffer Message = PosixExtractPacketMessage(Incoming);
     if(Message.Length == 0) {
@@ -175,8 +179,8 @@ void ProcessIncoming(posix_net_context *Context) {
         break;
       }
       case net_message_type_order_list: {
-        memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-        order_list_net_message ListMessage = UnserializeOrderListNetMessage(Message, &Context->Arena);
+        memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+        order_list_net_message ListMessage = UnserializeOrderListNetMessage(Message, &ctx->Arena);
         Assert(ValidateOrderListNetMessage(ListMessage));
         ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
         break;
@@ -185,48 +189,48 @@ void ProcessIncoming(posix_net_context *Context) {
         InvalidCodePath;
     }
 
-    memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-    Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
-    buffer Event = SerializeMessageNetEvent(Message, &Context->Arena);
-    ChunkRingBufferWrite(Context->EventRing, Event);
-    ByteRingBufferReadAdvance(Context->IncomingRing, POSIX_PACKET_HEADER_SIZE + Message.Length);
+    memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+    Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_EVENT_MAX_LENGTH);
+    buffer Event = SerializeMessageNetEvent(Message, &ctx->Arena);
+    ChunkRingBufferWrite(ctx->EventRing, Event);
+    ByteRingBufferReadAdvance(ctx->IncomingRing, POSIX_PACKET_HEADER_SIZE + Message.Length);
     ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
   }
 }
 
 void* RunPosixNet(void *VoidContext) {
-  posix_net_context *Context = (posix_net_context*)VoidContext;
-  Connect(Context);
+  posix_net_context *ctx = (posix_net_context*)VoidContext;
+  Connect(ctx);
 
-  while(Context->State != posix_net_state_stopped) {
+  while(ctx->State != posix_net_state_stopped) {
     fd_set FDSet;
     FD_ZERO(&FDSet);
-    FD_SET(Context->SocketFD, &FDSet);
-    FD_SET(Context->WakeReadFD, &FDSet);
+    FD_SET(ctx->SocketFD, &FDSet);
+    FD_SET(ctx->WakeReadFD, &FDSet);
 
-    int SelectResult = select(Context->FDMax+1, &FDSet, NULL, NULL, NULL);
+    int SelectResult = select(ctx->FDMax+1, &FDSet, NULL, NULL, NULL);
     Assert(SelectResult != -1);
 
-    if(FD_ISSET(Context->WakeReadFD, &FDSet)) {
+    if(FD_ISSET(ctx->WakeReadFD, &FDSet)) {
       ui8 X;
-      int Result = read(Context->WakeReadFD, &X, 1);
+      int Result = read(ctx->WakeReadFD, &X, 1);
       Assert(Result != -1);
-      ProcessCommands(Context);
+      ProcessCommands(ctx);
     }
 
-    if(FD_ISSET(Context->SocketFD, &FDSet)) {
-      if(Context->State == posix_net_state_connecting) {
+    if(FD_ISSET(ctx->SocketFD, &FDSet)) {
+      if(ctx->State == posix_net_state_connecting) {
         int OptionValue;
         socklen_t OptionLength = sizeof(OptionValue);
-        int Result = getsockopt(Context->SocketFD, SOL_SOCKET, SO_ERROR, &OptionValue, &OptionLength);
+        int Result = getsockopt(ctx->SocketFD, SOL_SOCKET, SO_ERROR, &OptionValue, &OptionLength);
         Assert(Result == 0);
         if(OptionValue == 0) {
-          Context->State = posix_net_state_connected;
+          ctx->State = posix_net_state_connected;
 
-          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-          Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
-          buffer Event = SerializeConnectionEstablishedNetEvent(&Context->Arena);
-          ChunkRingBufferWrite(Context->EventRing, Event);
+          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+          Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_EVENT_MAX_LENGTH);
+          buffer Event = SerializeConnectionEstablishedNetEvent(&ctx->Arena);
+          ChunkRingBufferWrite(ctx->EventRing, Event);
           ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
           printf("Connected.\n");
@@ -234,38 +238,38 @@ void* RunPosixNet(void *VoidContext) {
         else {
           printf("Connection failed.\n");
 
-          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-          Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
-          buffer Event = SerializeConnectionFailedNetEvent(&Context->Arena);
-          ChunkRingBufferWrite(Context->EventRing, Event);
+          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+          Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_EVENT_MAX_LENGTH);
+          buffer Event = SerializeConnectionFailedNetEvent(&ctx->Arena);
+          ChunkRingBufferWrite(ctx->EventRing, Event);
           ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
-          Context->State = posix_net_state_stopped;
+          ctx->State = posix_net_state_stopped;
         }
       }
       else {
-        ssize_t ReceivedCount = PosixNetReceive(Context->SocketFD, Context->ReceiveBuffer);
+        ssize_t ReceivedCount = PosixNetReceive(ctx->SocketFD, ctx->ReceiveBuffer);
         if(ReceivedCount == 0) {
           printf("Disconnected.\n");
 
-          ByteRingBufferReset(Context->IncomingRing);
+          ByteRingBufferReset(ctx->IncomingRing);
 
-          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-          Assert(GetMemoryArenaFree(&Context->Arena) >= NET_EVENT_MAX_LENGTH);
-          buffer Event = SerializeConnectionLostNetEvent(&Context->Arena);
-          ChunkRingBufferWrite(Context->EventRing, Event);
+          memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+          Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_EVENT_MAX_LENGTH);
+          buffer Event = SerializeConnectionLostNetEvent(&ctx->Arena);
+          ChunkRingBufferWrite(ctx->EventRing, Event);
           ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
-          Context->State = posix_net_state_stopped;
+          ctx->State = posix_net_state_stopped;
           continue;
         }
-        else if(Context->State == posix_net_state_connected) {
+        else if(ctx->State == posix_net_state_connected) {
           buffer Incoming = {
-            .Addr = Context->ReceiveBuffer.Addr,
+            .Addr = ctx->ReceiveBuffer.Addr,
             .Length = (memsize)ReceivedCount
           };
-          ByteRingBufferWrite(Context->IncomingRing, Incoming);
-          ProcessIncoming(Context);
+          ByteRingBufferWrite(ctx->IncomingRing, Incoming);
+          ProcessIncoming(ctx);
         }
       }
     }
@@ -276,41 +280,41 @@ void* RunPosixNet(void *VoidContext) {
   return NULL;
 }
 
-void ShutdownPosixNet(posix_net_context *Context) {
-  memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-  Assert(GetMemoryArenaFree(&Context->Arena) >= NET_COMMAND_MAX_LENGTH);
+void ShutdownPosixNet(posix_net_context *ctx) {
+  memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+  Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_COMMAND_MAX_LENGTH);
 
-  buffer Command = SerializeShutdownNetCommand(&Context->Arena);
-  ChunkRingBufferWrite(Context->CommandRing, Command);
+  buffer Command = SerializeShutdownNetCommand(&ctx->Arena);
+  ChunkRingBufferWrite(ctx->CommandRing, Command);
   ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
-  RequestWake(Context);
+  RequestWake(ctx);
 }
 
-void PosixNetSend(posix_net_context *Context, buffer Message) {
-  memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&Context->Arena);
-  Assert(GetMemoryArenaFree(&Context->Arena) >= NET_COMMAND_MAX_LENGTH);
-  buffer Command = SerializeSendNetCommand(Message, &Context->Arena);
-  ChunkRingBufferWrite(Context->CommandRing, Command);
+void PosixNetSend(posix_net_context *ctx, buffer Message) {
+  memory_arena_checkpoint ArenaCheckpoint = CreateMemoryArenaCheckpoint(&ctx->Arena);
+  Assert(GetMemoryArenaFree(&ctx->Arena) >= NET_COMMAND_MAX_LENGTH);
+  buffer Command = SerializeSendNetCommand(Message, &ctx->Arena);
+  ChunkRingBufferWrite(ctx->CommandRing, Command);
   ReleaseMemoryArenaCheckpoint(ArenaCheckpoint);
 
-  RequestWake(Context);
+  RequestWake(ctx);
 }
 
-void TerminatePosixNet(posix_net_context *Context) {
-  int Result = close(Context->SocketFD);
+void TerminatePosixNet(posix_net_context *ctx) {
+  int Result = close(ctx->SocketFD);
   Assert(Result == 0);
 
-  Result = close(Context->WakeReadFD);
+  Result = close(ctx->WakeReadFD);
   Assert(Result == 0);
   Assert(Result == 0);
-  Result = close(Context->WakeWriteFD);
+  Result = close(ctx->WakeWriteFD);
 
-  TerminateChunkRingBuffer(Context->EventRing);
-  TerminateChunkRingBuffer(Context->CommandRing);
-  TerminateByteRingBuffer(Context->IncomingRing);
+  TerminateChunkRingBuffer(ctx->EventRing);
+  TerminateChunkRingBuffer(ctx->CommandRing);
+  TerminateByteRingBuffer(ctx->IncomingRing);
 
-  Context->State = posix_net_state_inactive;
+  ctx->State = posix_net_state_inactive;
 
-  TerminateMemory(Context);
+  TerminateMemory(ctx);
 }

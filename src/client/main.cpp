@@ -30,8 +30,8 @@ struct client_context_t {
   chunk_list RenderCommandList;
   ivec2 Resolution;
   pthread_t NetThread;
-  posix_net_context NetContext;
   game_mouse Mouse;
+  posix_net_context NetContext;
 };
 
 static void HandleSigint(int signum) {
@@ -227,11 +227,11 @@ int main(int argc, char *argv[])
     InitChunkList(&g_state.RenderCommandList, Buffer);
   }
 
-  // InitPosixNet(&State.NetContext, HostAddress);
-  // {
-  //   int Result = pthread_create(&State.NetThread, 0, RunPosixNet, &State.NetContext);
-  //   Assert(Result == 0);
-  // }
+  InitPosixNet(&g_state.NetContext, HostAddress);
+  {
+    int Result = pthread_create(&g_state.NetThread, 0, RunPosixNet, &g_state.NetContext);
+    Assert(Result == 0);
+  }
 
   {
     buffer *B = &g_state.ClientMemory;

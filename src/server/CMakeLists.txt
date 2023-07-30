@@ -10,6 +10,8 @@ posix_net.cpp
 main.cpp
 )
 
+hunter_add_package(spdlog)
+
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE common)
+target_link_libraries(${PROJECT_NAME} PRIVATE common )
